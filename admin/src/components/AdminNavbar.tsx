@@ -83,7 +83,9 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({
           <div className="flex items-center space-x-4">
             {/* View Live Stream Site Button */}
             <a
-              href="http://localhost:5174/gtavi"
+              href={typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                ? 'http://localhost:5174/gtavi'
+                : 'https://live.5tart.sbs/gtavi'}
               target="_blank"
               rel="noopener noreferrer"
               className="hidden sm:flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 text-[#00f0ff] border border-[#00f0ff]/30 text-xs font-mono transition-colors"

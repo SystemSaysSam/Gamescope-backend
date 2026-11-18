@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: gamescope-backend
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CLIENT_URL
+        value: https://live.5tart.sbs
+      - key: ADMIN_URL
+        value: https://gamescopeserver.5tart.sbs
+      - key: CORS_ORIGINS
+        value: https://live.5tart.sbs,https://gamescopeserver.5tart.sbs,http://localhost:5174,http://localhost:5175,http://localhost:5000,http://127.0.0.1:5173,http://127.0.0.1:5174

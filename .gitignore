@@ -2,10 +2,6 @@
 node_modules/
 admin/node_modules/
 
-# Production builds
-dist/
-admin/dist/
-
 # Environment variables & secrets
 .env
 .env.local

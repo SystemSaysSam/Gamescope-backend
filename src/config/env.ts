@@ -9,9 +9,9 @@ export const env = {
   isProd: process.env.NODE_ENV === 'production',
 
   // Allowed CORS Origins (Client frontend & Admin frontend)
-  CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:5173',
-  ADMIN_URL: process.env.ADMIN_URL || 'http://localhost:5174',
-  CORS_ORIGINS: (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174')
+  CLIENT_URL: process.env.CLIENT_URL || (process.env.NODE_ENV === 'production' ? 'https://live.5tart.sbs' : 'http://localhost:5174'),
+  ADMIN_URL: process.env.ADMIN_URL || (process.env.NODE_ENV === 'production' ? 'https://gamescopeserver.5tart.sbs' : 'http://localhost:5000'),
+  CORS_ORIGINS: (process.env.CORS_ORIGINS || 'https://live.5tart.sbs,https://gamescopeserver.5tart.sbs,http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5000,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5000')
     .split(',')
     .map(s => s.trim())
     .filter(Boolean),
