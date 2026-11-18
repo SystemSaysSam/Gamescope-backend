@@ -29,16 +29,11 @@ export class SocketManager {
   public init(httpServer: HttpServer): Server {
     this.io = new Server(httpServer, {
       cors: {
-        origin: (origin, callback) => {
-          // Allow requests with no origin (like mobile apps, curl, or same-origin)
-          if (!origin) return callback(null, true);
-          if (env.CORS_ORIGINS.some(allowed => origin.startsWith(allowed) || allowed === '*')) {
-            return callback(null, true);
-          }
-          return callback(null, true); // Permissive in dev/testing, restrictable in prod
-        },
-        credentials: true
+        origin: (origin, callback) => callback(null, true),
+        credentials: true,
+        methods: ['GET', 'POST', 'OPTIONS']
       },
+      allowRequest: (req, callback) => callback(null, true),
       transports: ['websocket', 'polling'],
       pingInterval: 15000,
       pingTimeout: 10000

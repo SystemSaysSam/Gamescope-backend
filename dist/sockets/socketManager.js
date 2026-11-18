@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.socketManager = exports.SocketManager = void 0;
 const socket_io_1 = require("socket.io");
-const env_1 = require("../config/env");
 const auth_1 = require("../services/auth");
 const eventService_1 = require("../services/eventService");
 const chatService_1 = require("../services/chatService");
@@ -25,17 +24,11 @@ class SocketManager {
     init(httpServer) {
         this.io = new socket_io_1.Server(httpServer, {
             cors: {
-                origin: (origin, callback) => {
-                    // Allow requests with no origin (like mobile apps, curl, or same-origin)
-                    if (!origin)
-                        return callback(null, true);
-                    if (env_1.env.CORS_ORIGINS.some(allowed => origin.startsWith(allowed) || allowed === '*')) {
-                        return callback(null, true);
-                    }
-                    return callback(null, true); // Permissive in dev/testing, restrictable in prod
-                },
-                credentials: true
+                origin: (origin, callback) => callback(null, true),
+                credentials: true,
+                methods: ['GET', 'POST', 'OPTIONS']
             },
+            allowRequest: (req, callback) => callback(null, true),
             transports: ['websocket', 'polling'],
             pingInterval: 15000,
             pingTimeout: 10000
