@@ -130,7 +130,7 @@ export class NotificationService {
       icon: payload.icon || '/assets/gta6poster.jpg',
       badge: payload.badge || '/favicon.svg',
       tag: payload.tag || `gamescope-${Date.now()}`,
-      url: payload.url || '/',
+      url: payload.url || '/gtavi',
       type: payload.type || 'info',
       timestamp: Date.now()
     });
@@ -236,7 +236,7 @@ export class NotificationService {
         title,
         body,
         type: params.type,
-        url: params.url || '/',
+        url: params.url || '/gtavi',
         timestamp: Date.now()
       });
     }
@@ -246,7 +246,7 @@ export class NotificationService {
       pushBatchStats = await this.dispatchWebPushBatch({
         title,
         body,
-        url: params.url || '/',
+        url: params.url || '/gtavi',
         type: params.type,
         tag: `gamescope-admin-${Date.now()}`
       });
@@ -257,7 +257,7 @@ export class NotificationService {
       title,
       body,
       type: params.type,
-      url: params.url || '/',
+      url: params.url || '/gtavi',
       sendInSite: params.sendInSite,
       sendWebPush: params.sendWebPush,
       sentAt: Date.now(),

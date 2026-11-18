@@ -104,7 +104,7 @@ export async function startServer(): Promise<http.Server> {
         console.log(`  GAMESCOPE LIVE — PRODUCTION BACKEND`);
         console.log(`  Port:             http://localhost:${env.PORT}`);
         console.log(`  Environment:      ${env.NODE_ENV}`);
-        console.log(`  Public Client:    ${env.CLIENT_URL}`);
+        console.log(`  Public Client:    ${env.CLIENT_URL}/gtavi`);
         console.log(`  Admin Panel:      ${env.ADMIN_URL}`);
         console.log(`  CORS Allowed:     ${env.CORS_ORIGINS.join(', ')}`);
         console.log(`=======================================================`);

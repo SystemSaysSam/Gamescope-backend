@@ -107,7 +107,7 @@ export class EventService {
           title: '🔴 GameScope Live is NOW LIVE!',
           body: 'The Grand Theft Auto VI livestream broadcast has officially begun! Tune in now to watch.',
           type: 'important',
-          url: '/',
+          url: '/gtavi',
           sendInSite: true,
           sendWebPush: true,
           adminInfo: {

@@ -271,7 +271,7 @@ export class ReminderScheduler {
         body: 'The countdown is almost over. Get ready and join the premiere broadcast in 15 minutes!',
         tag: 'gamescope-15min-reminder',
         type: 'important',
-        url: '/'
+        url: '/gtavi'
       });
 
       // 3. Determine final status based on actual push service responses

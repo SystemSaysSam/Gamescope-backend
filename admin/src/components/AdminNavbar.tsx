@@ -12,7 +12,8 @@ import {
   Activity, 
   Vote,
   FileText,
-  Youtube
+  Youtube,
+  ExternalLink
 } from 'lucide-react';
 
 export type AdminTab = 
@@ -80,6 +81,18 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({
           </div>
 
           <div className="flex items-center space-x-4">
+            {/* View Live Stream Site Button */}
+            <a
+              href="http://localhost:5174/gtavi"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 text-[#00f0ff] border border-[#00f0ff]/30 text-xs font-mono transition-colors"
+              title="Open public livestream frontend at /gtavi"
+            >
+              <span>VIEW /GTAVI</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+
             {/* Live State Badge */}
             <div className="hidden sm:flex items-center space-x-2 px-3 py-1 rounded-full bg-black/60 border border-white/10 text-xs font-mono">
               <span className="text-slate-400">STREAM STATE:</span>
