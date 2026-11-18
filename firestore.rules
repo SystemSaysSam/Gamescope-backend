@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // GameScope Live Production Security Rules
+    // Principle: Server-Authoritative Architecture
+    // All writes to operational data (state, chat moderation, arcade scores, polls, audit logs)
+    // are strictly performed by the backend via Firebase Admin SDK.
+
+    // Deny all direct client writes by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Public configurations: Read-only for authenticated or anonymous clients
+    match /site_config/{document} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Active live polls: Public read access
+    match /live_polls/{pollId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Arcade leaderboard: Public read access
+    match /arcade_leaderboard/{scoreId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Chat messages: Public read access for non-deleted messages
+    match /chat_messages/{messageId} {
+      allow read: if resource.data.isDeleted != true;
+      allow write: if false;
+    }
+
+    // Pinned chat announcements: Public read access
+    match /chat_pins/{pinId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Audit logs: Strictly internal to Server Admin SDK
+    match /audit_logs/{logId} {
+      allow read, write: if false;
+    }
+
+    // Push subscriptions & Email subscriptions: Private to server
+    match /push_subscriptions/{subId} {
+      allow read, write: if false;
+    }
+
+    match /email_subscribers/{emailId} {
+      allow read, write: if false;
+    }
+
+    // Arcade active validation sessions: Private to server
+    match /arcade_sessions/{sessionId} {
+      allow read, write: if false;
+    }
+  }
+}
