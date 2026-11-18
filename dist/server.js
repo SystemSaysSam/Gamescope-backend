@@ -21,6 +21,7 @@ const arcadeService_1 = require("./services/arcadeService");
 const reminderScheduler_1 = require("./services/reminderScheduler");
 const identityService_1 = require("./services/identityService");
 const youtubeChatService_1 = require("./services/youtubeChatService");
+const analyticsService_1 = require("./services/analyticsService");
 const app = (0, express_1.default)();
 exports.app = app;
 const server = http_1.default.createServer(app);
@@ -97,6 +98,7 @@ async function startServer() {
         await arcadeService_1.arcadeService.init();
         await reminderScheduler_1.reminderScheduler.init();
         await identityService_1.identityService.init();
+        await analyticsService_1.analyticsService.init();
         await youtubeChatService_1.youtubeChatService.init();
         if (server.listening) {
             return server;

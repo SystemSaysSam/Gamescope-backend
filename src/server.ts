@@ -14,6 +14,7 @@ import { arcadeService } from './services/arcadeService';
 import { reminderScheduler } from './services/reminderScheduler';
 import { identityService } from './services/identityService';
 import { youtubeChatService } from './services/youtubeChatService';
+import { analyticsService } from './services/analyticsService';
 
 const app = express();
 const server = http.createServer(app);
@@ -99,6 +100,7 @@ export async function startServer(): Promise<http.Server> {
     await arcadeService.init();
     await reminderScheduler.init();
     await identityService.init();
+    await analyticsService.init();
     await youtubeChatService.init();
 
     if (server.listening) {

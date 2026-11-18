@@ -53,6 +53,11 @@ export class SocketManager {
       this.handleConnection(socket);
     });
 
+    // Wire analytics visitor broadcasts to socket events
+    analyticsService.registerBroadcastNotifier((count: number) => {
+      this.broadcastActiveVisitors(count);
+    });
+
     console.log('[SocketManager] Socket.IO server initialized.');
     return this.io;
   }
@@ -236,6 +241,12 @@ export class SocketManager {
 
   public broadcastReminderStatus(schedule: any) {
     this.io?.emit('reminder:status_update', { schedule });
+  }
+
+  public broadcastActiveVisitors(count?: number) {
+    const activeVisitors = count !== undefined ? count : analyticsService.getEffectiveActiveVisitors();
+    this.io?.emit('event:active_visitors', { activeVisitors });
+    this.io?.emit('analytics:active_users', { activeVisitors });
   }
 
   public broadcast(event: string, data: any) {

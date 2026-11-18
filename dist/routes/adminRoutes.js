@@ -482,6 +482,33 @@ router.get('/analytics', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+router.get('/analytics/online-count', async (req, res) => {
+    try {
+        const breakdown = analyticsService_1.analyticsService.getOnlineBreakdown();
+        res.json(breakdown);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+router.post('/analytics/online-count', async (req, res) => {
+    try {
+        const { forcedCount, reset } = req.body;
+        const admin = req.admin;
+        const countToSet = reset ? null : (forcedCount !== undefined ? forcedCount : null);
+        const breakdown = await analyticsService_1.analyticsService.setForcedOnlineCount(countToSet, admin.email);
+        await auditService_1.auditService.logAction({
+            adminId: admin.adminId,
+            adminEmail: admin.email,
+            action: countToSet !== null ? 'FORCE_UPDATE_ONLINE_COUNT' : 'RESET_ONLINE_COUNT_AUTOMATIC',
+            newValue: countToSet
+        });
+        res.json({ success: true, breakdown });
+    }
+    catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
 router.get('/audit-logs', async (req, res) => {
     try {
         const logs = await auditService_1.auditService.getRecentLogs(100);
@@ -515,6 +542,26 @@ router.post('/youtube/video-id', async (req, res) => {
     }
     catch (err) {
         res.status(400).json({ error: err.message });
+    }
+});
+router.post('/youtube/poll-stream', async (req, res) => {
+    try {
+        const { pollVideoId } = req.body;
+        const admin = req.admin;
+        const state = await youtubeChatService_1.youtubeChatService.setCustomPollVideoId(pollVideoId, admin.email);
+        res.json({ success: true, state, activePoll: youtubeChatService_1.youtubeChatService.getActivePoll() });
+    }
+    catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+router.post('/youtube/poll-stream/sync', async (req, res) => {
+    try {
+        const result = await youtubeChatService_1.youtubeChatService.syncCustomPollStream();
+        res.json({ success: result.success, poll: result.poll, error: result.error, state: youtubeChatService_1.youtubeChatService.getState() });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 router.post('/youtube/settings', async (req, res) => {

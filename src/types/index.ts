@@ -237,6 +237,17 @@ export interface AnalyticsData {
   serverUptimeSeconds: number;
 }
 
+export interface OnlineCountBreakdown {
+  baseWebsiteVisitors: number;
+  admittedLiveChatUsers: number;
+  combinedAutoCount: number;
+  forcedCount: number | null;
+  isForced: boolean;
+  effectiveCount: number;
+  updatedAt?: number;
+  updatedBy?: string;
+}
+
 /* ---------------- YouTube Live Chat & GTA Identity Models ---------------- */
 
 export type IdentitySourceType = 'GAMESCOPE' | 'YOUTUBE';
@@ -273,6 +284,7 @@ export type ActivityLevel = 'QUIET' | 'MODERATE' | 'HIGH' | 'VERY_HIGH';
 
 export interface YouTubeChatConfig {
   videoId?: string;
+  customPollVideoId?: string | null;
   importEnabled: boolean;
   pollFallbackEnabled: boolean; // Enable YouTube Poll Fallback when no GameScope admin poll is active
   adaptiveEnabled: boolean;
@@ -334,6 +346,12 @@ export interface YouTubeIngestionState {
   uniqueParticipantCount: number;
   claimedByInstance?: string;
   claimExpiresAt?: number;
+  // Custom Alternative YouTube Poll Stream Source
+  customPollVideoId?: string | null;
+  customPollLiveChatId?: string | null;
+  customPollStatus?: 'IDLE' | 'FETCHING' | 'ACTIVE' | 'ERROR' | 'NO_POLL';
+  customPollLastError?: string | null;
+  customPollLastSyncedAt?: number | null;
   // Delayed Continuous Polling & Quota Budget Telemetry
   nextPageToken?: string | null;
   configuredPollingIntervalSeconds?: number;

@@ -77,6 +77,9 @@ export class AdaptiveAudienceController {
         ? Math.min(this.config.maximumCapacity, Math.max(this.config.minimumCapacity, this.config.manualCapacityOverride))
         : this.config.defaultCapacity;
 
+      // Register live admitted participant count getter with AnalyticsService
+      analyticsService.registerAdmittedCountGetter(() => this.getAdmittedCount());
+
       console.log(`[AdaptiveController] Initialized. Capacity: ${this.currentCapacity}, AdaptiveEnabled: ${this.config.adaptiveEnabled}`);
     } catch (err: any) {
       console.warn('[AdaptiveController] Init warning:', err.message);
@@ -170,8 +173,8 @@ export class AdaptiveAudienceController {
    * If active website visitors >= 10, imports IMMEDIATELY stop.
    */
   public isMasterGateOpen(): boolean {
-    const activeVisitors = analyticsService.getEffectiveActiveVisitors();
-    return activeVisitors < 10;
+    const activeWebsiteVisitors = analyticsService.getBaseWebsiteVisitors();
+    return activeWebsiteVisitors < 10;
   }
 
   public isImportAllowed(): boolean {
@@ -216,6 +219,9 @@ export class AdaptiveAudienceController {
       }
     }
 
+    if (releasedCount > 0) {
+      analyticsService.notifyOnlineCountChanged();
+    }
     return releasedCount;
   }
 
@@ -237,6 +243,9 @@ export class AdaptiveAudienceController {
       p.status = 'RELEASED';
       this.activeParticipantIds.delete(p.channelId);
       console.log(`[AdaptiveController] Scaled down capacity: released slot for ${p.displayName} (LRU). Active: ${this.activeParticipantIds.size}/${this.currentCapacity}`);
+    }
+    if (toRelease.length > 0) {
+      analyticsService.notifyOnlineCountChanged();
     }
   }
 
@@ -298,6 +307,7 @@ export class AdaptiveAudienceController {
         existing.originalUsername = originalUsername;
       }
       this.activeParticipantIds.add(channelId);
+      analyticsService.notifyOnlineCountChanged();
       console.log(`[AdaptiveController] Returning participant restored: ${existing.displayName} (${channelId})`);
       return { admitted: true, identity: existing.assignedIdentity, reason: 'RESTORED' };
     }
@@ -327,6 +337,7 @@ export class AdaptiveAudienceController {
     this.streamParticipants.set(channelId, participant);
     this.activeParticipantIds.add(channelId);
     this.streamAssignedNames.add(identity.normalizedName);
+    analyticsService.notifyOnlineCountChanged();
 
     console.log(`[AdaptiveController] Admitted new YouTube participant: ${identity.displayName} [Active: ${this.activeParticipantIds.size}/${this.currentCapacity}]`);
     return { admitted: true, identity, reason: 'NEW_ADMISSION' };
@@ -363,6 +374,7 @@ export class AdaptiveAudienceController {
     this.currentCapacity = this.config.defaultCapacity;
     this.currentActivityLevel = 'QUIET';
     this.trend = 'STABLE';
+    analyticsService.notifyOnlineCountChanged();
   }
 
   /**

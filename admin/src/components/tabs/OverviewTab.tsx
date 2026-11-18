@@ -13,6 +13,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { AdminTab } from '../AdminNavbar';
+import { OnlineAudienceCard } from '../OnlineAudienceCard';
 
 interface OverviewTabProps {
   config: any;
@@ -67,6 +68,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           <span>Refresh Data</span>
         </button>
       </div>
+
+      {/* Online Audience Realtime Controller & Breakdown */}
+      <OnlineAudienceCard />
 
       {/* 4 Hero Status Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -49,7 +49,10 @@ class AdminSocketService {
       'notification:broadcast',
       'reminder:status_update',
       'youtube:status_update',
-      'youtube:metrics_update'
+      'youtube:metrics_update',
+      'youtube:poll_updated',
+      'event:active_visitors',
+      'analytics:active_users'
     ];
 
     for (const evt of knownEvents) {

@@ -10,6 +10,7 @@ import {
   Clock,
   Activity
 } from 'lucide-react';
+import { OnlineAudienceCard } from '../OnlineAudienceCard';
 
 interface AnalyticsTabProps {
   analytics: any;
@@ -42,6 +43,9 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ analytics, onRefresh
           <span>Refresh Analytics</span>
         </button>
       </div>
+
+      {/* Online Audience Realtime Controller & Breakdown */}
+      <OnlineAudienceCard />
 
       {/* 4 Distinct Core Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

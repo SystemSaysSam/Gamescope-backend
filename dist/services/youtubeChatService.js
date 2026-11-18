@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.youtubeChatService = exports.YouTubeChatService = void 0;
+exports.extractYouTubeVideoId = extractYouTubeVideoId;
 const crypto_1 = __importDefault(require("crypto"));
 const db_1 = require("./db");
 const env_1 = require("../config/env");
@@ -12,6 +13,16 @@ const adaptiveAudienceController_1 = require("./adaptiveAudienceController");
 const queueService_1 = require("./queueService");
 const socketManager_1 = require("../sockets/socketManager");
 const auditService_1 = require("./auditService");
+function extractYouTubeVideoId(input) {
+    if (!input)
+        return null;
+    const trimmed = input.trim();
+    if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
+        return trimmed;
+    }
+    const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|live\/|shorts\/))([a-zA-Z0-9_-]{11})/i);
+    return match ? match[1] : null;
+}
 class YouTubeChatService {
     static instance;
     instanceId;
@@ -24,6 +35,13 @@ class YouTubeChatService {
     effectivePollingIntervalMs = 60000;
     processedMessageIds = new Set();
     currentPoll = null;
+    // Custom Alternative YouTube Poll Stream Source
+    customPollVideoId = null;
+    customPollLiveChatId = null;
+    customPollStatus = 'IDLE';
+    customPollLastError = null;
+    customPollLastSyncedAt = null;
+    customPollPageToken = null;
     // Ingestion State & Telemetry
     state = {
         selectedVideoId: '',
@@ -92,6 +110,16 @@ class YouTubeChatService {
         }
         // 3. Resolve active video ID
         await this.resolveSelectedVideoId();
+        // 3b. Load saved custom poll stream if configured
+        try {
+            const savedCustomPoll = await db_1.db.getDoc('site_config', 'youtube_custom_poll');
+            if (savedCustomPoll?.customPollVideoId) {
+                this.customPollVideoId = savedCustomPoll.customPollVideoId;
+                this.state.customPollVideoId = savedCustomPoll.customPollVideoId;
+                console.log(`[YouTubeChatService] Restored custom poll stream video ID: '${this.customPollVideoId}'`);
+            }
+        }
+        catch { }
         // 4. Update initial telemetry intervals
         this.refreshTelemetryIntervals();
         // 5. Start ingestion lifecycle
@@ -217,7 +245,15 @@ class YouTubeChatService {
     }
     getState() {
         this.refreshTelemetryIntervals();
-        return { ...this.state, activePoll: this.currentPoll };
+        return {
+            ...this.state,
+            activePoll: this.currentPoll,
+            customPollVideoId: this.customPollVideoId,
+            customPollLiveChatId: this.customPollLiveChatId,
+            customPollStatus: this.customPollStatus,
+            customPollLastError: this.customPollLastError,
+            customPollLastSyncedAt: this.customPollLastSyncedAt
+        };
     }
     updateStatus(status, error) {
         this.state.status = status;
@@ -670,6 +706,155 @@ class YouTubeChatService {
         // Trigger immediate step
         this.step().catch(() => { });
         return this.getState();
+    }
+    /**
+     * Admin: Set or Clear Custom YouTube Poll Stream
+     * Allows extracting and displaying live polls from another YouTube chat using its stream ID or URL.
+     */
+    async setCustomPollVideoId(videoIdOrUrl, adminEmail) {
+        const previous = this.customPollVideoId;
+        if (!videoIdOrUrl || !videoIdOrUrl.trim()) {
+            // Clear custom poll stream setting
+            this.customPollVideoId = null;
+            this.customPollLiveChatId = null;
+            this.customPollStatus = 'IDLE';
+            this.customPollLastError = null;
+            this.customPollLastSyncedAt = null;
+            this.customPollPageToken = null;
+            this.state.customPollVideoId = null;
+            this.state.customPollLiveChatId = null;
+            this.state.customPollStatus = 'IDLE';
+            await db_1.db.setDoc('site_config', 'youtube_custom_poll', {
+                customPollVideoId: null,
+                updatedAt: Date.now(),
+                updatedBy: adminEmail
+            });
+            await auditService_1.auditService.logAction({
+                adminId: 'admin',
+                adminEmail,
+                action: 'CLEAR_YOUTUBE_CUSTOM_POLL_STREAM',
+                previousValue: previous
+            });
+            console.log(`[YouTubeChatService] Custom poll stream cleared by ${adminEmail}. Returning to default stream.`);
+            return this.getState();
+        }
+        const cleanId = extractYouTubeVideoId(videoIdOrUrl);
+        if (!cleanId || !this.isValidVideoId(cleanId)) {
+            throw new Error(`Invalid YouTube Video ID or URL '${videoIdOrUrl}'. Must be an 11-character video ID or valid YouTube URL.`);
+        }
+        this.customPollVideoId = cleanId;
+        this.customPollLiveChatId = null;
+        this.customPollStatus = 'FETCHING';
+        this.customPollLastError = null;
+        this.customPollPageToken = null;
+        this.state.customPollVideoId = cleanId;
+        this.state.customPollStatus = 'FETCHING';
+        await db_1.db.setDoc('site_config', 'youtube_custom_poll', {
+            customPollVideoId: cleanId,
+            updatedAt: Date.now(),
+            updatedBy: adminEmail
+        });
+        await auditService_1.auditService.logAction({
+            adminId: 'admin',
+            adminEmail,
+            action: 'SET_YOUTUBE_CUSTOM_POLL_STREAM',
+            previousValue: previous,
+            newValue: cleanId
+        });
+        console.log(`[YouTubeChatService] Custom poll stream configured to '${cleanId}' by ${adminEmail}. Triggering poll sync...`);
+        // Sync poll immediately
+        await this.syncCustomPollStream();
+        return this.getState();
+    }
+    /**
+     * Fetch and sync active poll from custom YouTube stream
+     */
+    async syncCustomPollStream() {
+        if (!this.customPollVideoId) {
+            return { success: false, poll: null, error: 'No custom poll stream ID configured.' };
+        }
+        const apiKey = (env_1.env.YOUTUBE_API_KEY || '').trim();
+        if (!apiKey) {
+            this.customPollStatus = 'ERROR';
+            this.customPollLastError = 'YOUTUBE_API_KEY is not configured on the backend server.';
+            return { success: false, poll: null, error: this.customPollLastError };
+        }
+        if (this.state.isQuotaExhausted) {
+            this.customPollStatus = 'ERROR';
+            this.customPollLastError = 'YouTube API quota exhausted.';
+            return { success: false, poll: null, error: this.customPollLastError };
+        }
+        try {
+            this.customPollStatus = 'FETCHING';
+            // 1. Resolve liveChatId if not cached
+            if (!this.customPollLiveChatId) {
+                this.recordQuotaUsage(1);
+                const vidUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,liveStreamingDetails&id=${encodeURIComponent(this.customPollVideoId)}&key=${encodeURIComponent(apiKey)}`;
+                const vidRes = await fetch(vidUrl);
+                const vidData = await vidRes.json().catch(() => ({}));
+                if (!vidRes.ok) {
+                    const errMsg = vidData?.error?.message || `YouTube API HTTP ${vidRes.status}`;
+                    this.customPollStatus = 'ERROR';
+                    this.customPollLastError = errMsg;
+                    return { success: false, poll: null, error: errMsg };
+                }
+                const item = vidData?.items?.[0];
+                const activeChatId = item?.liveStreamingDetails?.activeLiveChatId;
+                if (!activeChatId) {
+                    this.customPollStatus = 'ERROR';
+                    this.customPollLastError = `Stream '${this.customPollVideoId}' has no active live chat window.`;
+                    return { success: false, poll: null, error: this.customPollLastError };
+                }
+                this.customPollLiveChatId = activeChatId;
+            }
+            if (!this.customPollLiveChatId) {
+                this.customPollStatus = 'ERROR';
+                this.customPollLastError = `Could not resolve live chat for stream '${this.customPollVideoId}'.`;
+                return { success: false, poll: null, error: this.customPollLastError };
+            }
+            // 2. Query liveChatMessages to extract poll
+            this.recordQuotaUsage(5);
+            let pollMsgUrl = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${encodeURIComponent(this.customPollLiveChatId)}&part=snippet&maxResults=50&key=${encodeURIComponent(apiKey)}`;
+            if (this.customPollPageToken) {
+                pollMsgUrl += `&pageToken=${encodeURIComponent(this.customPollPageToken)}`;
+            }
+            const msgRes = await fetch(pollMsgUrl);
+            const msgData = await msgRes.json().catch(() => ({}));
+            if (!msgRes.ok) {
+                const errMsg = msgData?.error?.message || `YouTube API HTTP ${msgRes.status}`;
+                this.customPollStatus = 'ERROR';
+                this.customPollLastError = errMsg;
+                return { success: false, poll: null, error: errMsg };
+            }
+            this.customPollPageToken = msgData.nextPageToken || this.customPollPageToken;
+            this.customPollLastSyncedAt = Date.now();
+            // Check activePollItem in response payload
+            let foundPollItem = msgData.activePollItem || msgData.activePoll;
+            if (!foundPollItem && Array.isArray(msgData.items)) {
+                for (const item of msgData.items) {
+                    if (item.snippet?.type === 'pollEvent' || item.snippet?.pollDetails || item.pollDetails) {
+                        foundPollItem = item;
+                        break;
+                    }
+                }
+            }
+            if (foundPollItem) {
+                const parsed = this.parseAndApplyPollItem(foundPollItem);
+                if (parsed) {
+                    this.customPollStatus = 'ACTIVE';
+                    this.customPollLastError = null;
+                    return { success: true, poll: parsed };
+                }
+            }
+            this.customPollStatus = 'NO_POLL';
+            this.customPollLastError = 'No active poll currently found on the specified stream.';
+            return { success: true, poll: this.currentPoll, error: this.customPollLastError };
+        }
+        catch (err) {
+            this.customPollStatus = 'ERROR';
+            this.customPollLastError = err.message;
+            return { success: false, poll: null, error: err.message };
+        }
     }
     /**
      * Admin: Force Reconnect

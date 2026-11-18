@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Vote, Plus, Lock, BarChart2, RefreshCw, Clock, Trash2 } from 'lucide-react';
+import { Vote, Plus, Lock, BarChart2, RefreshCw, Clock, Trash2, Youtube, CheckCircle2, Zap } from 'lucide-react';
 import { adminApi } from '../../services/adminApi';
 import { adminSocket } from '../../services/adminSocket';
 
@@ -15,14 +15,42 @@ export const PollsTab: React.FC = () => {
   const [durationMinutes, setDurationMinutes] = useState(15);
   const [createLoading, setCreateLoading] = useState(false);
 
+  // Custom Alternative YouTube Poll Source State
+  const [customPollInput, setCustomPollInput] = useState('');
+  const [customPollVideoId, setCustomPollVideoId] = useState<string | null>(null);
+  const [customPollStatus, setCustomPollStatus] = useState<string>('IDLE');
+  const [customPollLastError, setCustomPollLastError] = useState<string | null>(null);
+  const [youtubePoll, setYoutubePoll] = useState<any | null>(null);
+  const [pollFallbackEnabled, setPollFallbackEnabled] = useState(true);
+  const [customPollLoading, setCustomPollLoading] = useState(false);
+  const [customPollFeedback, setCustomPollFeedback] = useState<string | null>(null);
+
   const fetchPolls = async () => {
     setLoading(true);
     try {
       const publicCfg = await adminApi.getPublicConfig();
       setActivePoll(publicCfg.activePoll || null);
+      if (publicCfg.youtubePoll) {
+        setYoutubePoll(publicCfg.youtubePoll);
+      }
+      setPollFallbackEnabled(publicCfg.pollFallbackEnabled !== false);
 
       const hist = await adminApi.getPollHistory();
       setPollHistory(hist.polls || []);
+
+      // Fetch YouTube state to inspect custom poll video ID
+      const ytStatus = await adminApi.getYouTubeStatus();
+      if (ytStatus?.state) {
+        setCustomPollVideoId(ytStatus.state.customPollVideoId || null);
+        setCustomPollStatus(ytStatus.state.customPollStatus || 'IDLE');
+        setCustomPollLastError(ytStatus.state.customPollLastError || null);
+        if (ytStatus.state.customPollVideoId) {
+          setCustomPollInput(ytStatus.state.customPollVideoId);
+        }
+      }
+      if (ytStatus?.state?.activePoll) {
+        setYoutubePoll(ytStatus.state.activePoll);
+      }
     } catch (err: any) {
       console.error('Error fetching polls:', err);
     } finally {
@@ -51,13 +79,98 @@ export const PollsTab: React.FC = () => {
       setActivePoll(null);
     });
 
+    const unsubYtPoll = adminSocket.on('youtube:poll_updated', (payload: any) => {
+      if (payload?.poll !== undefined) {
+        setYoutubePoll(payload.poll);
+      }
+    });
+
+    const unsubYtStatus = adminSocket.on('youtube:status_update', (state: any) => {
+      if (state?.customPollVideoId !== undefined) {
+        setCustomPollVideoId(state.customPollVideoId || null);
+      }
+      if (state?.customPollStatus) {
+        setCustomPollStatus(state.customPollStatus);
+      }
+      if (state?.customPollLastError !== undefined) {
+        setCustomPollLastError(state.customPollLastError || null);
+      }
+    });
+
     return () => {
       unsubResults();
       unsubCreated();
       unsubClosed();
       unsubRemoved();
+      unsubYtPoll();
+      unsubYtStatus();
     };
   }, []);
+
+  const handleSetCustomPoll = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customPollInput.trim()) {
+      alert('Please enter a YouTube video ID or livestream URL.');
+      return;
+    }
+    setCustomPollLoading(true);
+    setCustomPollFeedback(null);
+    try {
+      const res = await adminApi.setCustomPollStream(customPollInput.trim());
+      if (res?.state) {
+        setCustomPollVideoId(res.state.customPollVideoId || null);
+        setCustomPollStatus(res.state.customPollStatus || 'IDLE');
+        setCustomPollLastError(res.state.customPollLastError || null);
+      }
+      if (res?.activePoll) {
+        setYoutubePoll(res.activePoll);
+      }
+      setCustomPollFeedback('Custom poll stream configured and synced successfully!');
+    } catch (err: any) {
+      alert(`Error setting custom poll stream: ${err.message}`);
+    } finally {
+      setCustomPollLoading(false);
+    }
+  };
+
+  const handleSyncCustomPoll = async () => {
+    setCustomPollLoading(true);
+    setCustomPollFeedback(null);
+    try {
+      const res = await adminApi.syncCustomPollStream();
+      if (res?.poll) {
+        setYoutubePoll(res.poll);
+        setCustomPollFeedback(`Poll synced: "${res.poll.question}" with ${res.poll.totalVotes} votes!`);
+      } else if (res?.error) {
+        setCustomPollFeedback(`Sync completed: ${res.error}`);
+      }
+      if (res?.state) {
+        setCustomPollStatus(res.state.customPollStatus || 'IDLE');
+        setCustomPollLastError(res.state.customPollLastError || null);
+      }
+    } catch (err: any) {
+      alert(`Error syncing poll: ${err.message}`);
+    } finally {
+      setCustomPollLoading(false);
+    }
+  };
+
+  const handleClearCustomPoll = async () => {
+    setCustomPollLoading(true);
+    setCustomPollFeedback(null);
+    try {
+      await adminApi.setCustomPollStream(null);
+      setCustomPollVideoId(null);
+      setCustomPollInput('');
+      setCustomPollStatus('IDLE');
+      setCustomPollLastError(null);
+      setCustomPollFeedback('Custom poll stream cleared. Returned to default livestream.');
+    } catch (err: any) {
+      alert(`Error clearing custom poll stream: ${err.message}`);
+    } finally {
+      setCustomPollLoading(false);
+    }
+  };
 
   const handleAddOptionField = () => {
     if (options.length < 5) {
@@ -242,6 +355,146 @@ export const PollsTab: React.FC = () => {
         ) : (
           <p className="text-xs font-mono text-slate-500 py-6 italic text-center">
             No active poll configured. Click 'Create New Poll' above to launch one.
+          </p>
+        )}
+      </div>
+
+      {/* Alternative YouTube Poll Source Card */}
+      <div className="p-6 rounded-2xl bg-[#0d111a] border border-white/10 space-y-5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div>
+            <div className="flex items-center space-x-2.5">
+              <Youtube className="w-5 h-5 text-red-500" />
+              <h3 className="text-lg font-display font-black text-white uppercase tracking-wider">
+                ALTERNATIVE YOUTUBE LIVE POLL SOURCE
+              </h3>
+              {customPollVideoId ? (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                  CUSTOM: {customPollVideoId} ({customPollStatus})
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white/10 text-slate-300">
+                  MAIN STREAM SOURCE
+                </span>
+              )}
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                pollFallbackEnabled ? 'bg-[#00ff88]/20 text-[#00ff88] border border-[#00ff88]/40' : 'bg-slate-700 text-slate-300'
+              }`}>
+                FALLBACK: {pollFallbackEnabled ? 'ON' : 'OFF'}
+              </span>
+            </div>
+            <p className="text-xs font-mono text-slate-400 mt-1">
+              Optionally pull live polls from any other YouTube livestream using its 11-char Stream ID or URL. When no GameScope admin poll is active, viewers will see this live YouTube poll in the chat window.
+            </p>
+          </div>
+
+          {customPollVideoId && (
+            <button
+              onClick={handleSyncCustomPoll}
+              disabled={customPollLoading}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-black/60 hover:bg-black/90 border border-white/15 text-xs font-mono text-slate-300"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[#00f0ff] ${customPollLoading ? 'animate-spin' : ''}`} />
+              <span>Sync Now</span>
+            </button>
+          )}
+        </div>
+
+        {/* Stream ID Input & Actions */}
+        <form onSubmit={handleSetCustomPoll} className="space-y-3">
+          <label className="block text-xs font-mono text-slate-300 uppercase">
+            YOUTUBE STREAM ID OR LIVESTREAM URL
+          </label>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <input
+              type="text"
+              value={customPollInput}
+              onChange={(e) => setCustomPollInput(e.target.value)}
+              placeholder="e.g. dQw4w9WgXcQ or https://www.youtube.com/watch?v=..."
+              className="flex-1 px-4 py-2.5 rounded-xl bg-black/60 border border-white/15 focus:border-[#00f0ff] text-white font-mono text-xs outline-none"
+            />
+            <button
+              type="submit"
+              disabled={customPollLoading}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-[#ff2a85] hover:opacity-90 font-display font-bold text-xs text-white uppercase tracking-wider shadow-lg shadow-red-600/20 flex items-center justify-center space-x-1.5"
+            >
+              <Zap className="w-4 h-4" />
+              <span>Set &amp; Sync Poll</span>
+            </button>
+            {customPollVideoId && (
+              <button
+                type="button"
+                onClick={handleClearCustomPoll}
+                disabled={customPollLoading}
+                className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-mono text-slate-200 uppercase"
+              >
+                Clear / Default
+              </button>
+            )}
+          </div>
+          {customPollLastError && (
+            <p className="text-xs font-mono text-red-400">
+              {customPollLastError}
+            </p>
+          )}
+          {customPollFeedback && (
+            <p className="text-xs font-mono text-[#00ff88] flex items-center space-x-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{customPollFeedback}</span>
+            </p>
+          )}
+        </form>
+
+        {/* Live Preview of Ingested YouTube Poll */}
+        {youtubePoll ? (
+          <div className="p-4 rounded-xl bg-black/40 border border-white/10 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-600 text-white">
+                  YOUTUBE POLL
+                </span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                  youtubePoll.status === 'active' ? 'bg-[#00ff88]/20 text-[#00ff88]' : 'bg-slate-700 text-slate-300'
+                }`}>
+                  {youtubePoll.status}
+                </span>
+              </div>
+              <span className="text-xs font-mono text-slate-400">
+                Total votes: <strong className="text-white">{youtubePoll.totalVotes?.toLocaleString()}</strong>
+              </span>
+            </div>
+
+            <h5 className="font-display font-bold text-base text-white">
+              {youtubePoll.question}
+            </h5>
+
+            <div className="space-y-2">
+              {youtubePoll.options?.map((opt: any, idx: number) => {
+                const pct = youtubePoll.totalVotes > 0 
+                  ? Math.round((opt.votes / youtubePoll.totalVotes) * 100) 
+                  : 0;
+                return (
+                  <div key={opt.id || idx} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="text-slate-200">{opt.text}</span>
+                      <span className="text-red-400 font-bold">
+                        {opt.votes?.toLocaleString()} ({pct}%)
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-black/60 overflow-hidden border border-white/10">
+                      <div 
+                        className="h-full bg-gradient-to-r from-red-500 to-[#ff2a85] transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs font-mono text-slate-500 italic">
+            No live YouTube poll currently active on the configured stream.
           </p>
         )}
       </div>

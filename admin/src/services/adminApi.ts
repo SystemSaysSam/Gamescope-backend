@@ -279,6 +279,38 @@ export class AdminApiService {
     return this.request<{ success: boolean; wipeState: any }>('/admin/chat/clear', { method: 'POST' });
   }
 
+  /* ---------------- Online Audience Controls ---------------- */
+
+  public async getOnlineCount() {
+    return this.request<{
+      baseWebsiteVisitors: number;
+      admittedLiveChatUsers: number;
+      combinedAutoCount: number;
+      forcedCount: number | null;
+      isForced: boolean;
+      effectiveCount: number;
+      updatedAt?: number;
+      updatedBy?: string;
+    }>('/admin/analytics/online-count');
+  }
+
+  public async setForcedOnlineCount(forcedCount: number | null) {
+    return this.request<{
+      success: boolean;
+      breakdown: {
+        baseWebsiteVisitors: number;
+        admittedLiveChatUsers: number;
+        combinedAutoCount: number;
+        forcedCount: number | null;
+        isForced: boolean;
+        effectiveCount: number;
+      };
+    }>('/admin/analytics/online-count', {
+      method: 'POST',
+      body: JSON.stringify({ forcedCount, reset: forcedCount === null })
+    });
+  }
+
   /* ---------------- YouTube Live Chat Integration ---------------- */
 
   public async getYouTubeStatus() {
@@ -324,6 +356,21 @@ export class AdminApiService {
 
   public async getYouTubeMetrics() {
     return this.request<{ metrics: any; state: any; participants?: any[] }>('/admin/youtube/metrics');
+  }
+
+  /* ---------------- Custom YouTube Poll Stream ---------------- */
+
+  public async setCustomPollStream(pollVideoId: string | null) {
+    return this.request<any>('/admin/youtube/poll-stream', {
+      method: 'POST',
+      body: JSON.stringify({ pollVideoId })
+    });
+  }
+
+  public async syncCustomPollStream() {
+    return this.request<any>('/admin/youtube/poll-stream/sync', {
+      method: 'POST'
+    });
   }
 }
 

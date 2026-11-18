@@ -1538,6 +1538,121 @@ async function runTests() {
     }
   });
 
+  // Test 56: Combined Online Count (Web Visitors + Admitted YouTube Live Chat Participants)
+  await assertTest('Online count combines website visitors and admitted live chat participants', async () => {
+    const { analyticsService } = await import('../src/services/analyticsService');
+    const { adaptiveAudienceController } = await import('../src/services/adaptiveAudienceController');
+
+    // Ensure reset to auto
+    await analyticsService.setForcedOnlineCount(null, 'test@gamescope.gg');
+
+    const baseWeb = analyticsService.getBaseWebsiteVisitors();
+    const admittedChat = adaptiveAudienceController.getAdmittedCount();
+    const combined = analyticsService.getEffectiveActiveVisitors();
+
+    if (combined !== baseWeb + admittedChat) {
+      throw new Error(`Expected combined count ${baseWeb + admittedChat}, got ${combined}`);
+    }
+
+    const breakdown = analyticsService.getOnlineBreakdown();
+    if (breakdown.isForced !== false || breakdown.effectiveCount !== combined) {
+      throw new Error(`Breakdown mismatch: ${JSON.stringify(breakdown)}`);
+    }
+
+    // Verify public endpoint returns combined count
+    const publicRes = await api('/api/config/public');
+    if (!publicRes.ok || publicRes.data.activeVisitors !== combined) {
+      throw new Error(`Expected /api/config/public activeVisitors ${combined}, got ${publicRes.data.activeVisitors}`);
+    }
+  });
+
+  // Test 57: Admin Force Update Online Count and Reset to Automatic
+  await assertTest('Admin panel force updates online count and resets back to automatic', async () => {
+    const { analyticsService } = await import('../src/services/analyticsService');
+
+    // 1. Force update to 1250
+    const forceRes = await api('/api/admin/analytics/online-count', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ forcedCount: 1250 })
+    });
+
+    if (!forceRes.ok || !forceRes.data.success || forceRes.data.breakdown.effectiveCount !== 1250) {
+      throw new Error(`Failed to force update online count via admin API: ${JSON.stringify(forceRes.data)}`);
+    }
+
+    // Verify public endpoints return 1250
+    let publicRes = await api('/api/config/public');
+    if (publicRes.data.activeVisitors !== 1250) {
+      throw new Error(`Expected forced activeVisitors 1250, got ${publicRes.data.activeVisitors}`);
+    }
+
+    let pingRes = await api('/api/analytics/ping', {
+      method: 'POST',
+      body: JSON.stringify({ clientId: 'test-ping-client' })
+    });
+    if (pingRes.data.activeVisitors !== 1250) {
+      throw new Error(`Expected ping activeVisitors 1250, got ${pingRes.data.activeVisitors}`);
+    }
+
+    // 2. Reset back to automatic
+    const resetRes = await api('/api/admin/analytics/online-count', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ reset: true })
+    });
+
+    if (!resetRes.ok || !resetRes.data.success || resetRes.data.breakdown.isForced !== false) {
+      throw new Error(`Failed to reset online count to automatic: ${JSON.stringify(resetRes.data)}`);
+    }
+
+    publicRes = await api('/api/config/public');
+    if (publicRes.data.activeVisitors === 1250) {
+      throw new Error(`Expected activeVisitors to return to automatic count, still 1250`);
+    }
+  });
+
+  // Test 58: Custom YouTube Poll Stream Configuration, URL Extraction & Sync
+  await assertTest('Custom YouTube poll stream supports stream ID and URL extraction, sync, and clear', async () => {
+    const { extractYouTubeVideoId } = await import('../src/services/youtubeChatService');
+
+    // Test URL extraction helper
+    if (extractYouTubeVideoId('dQw4w9WgXcQ') !== 'dQw4w9WgXcQ') {
+      throw new Error('Raw video ID extraction failed');
+    }
+    if (extractYouTubeVideoId('https://www.youtube.com/watch?v=dQw4w9WgXcQ') !== 'dQw4w9WgXcQ') {
+      throw new Error('Standard YouTube URL extraction failed');
+    }
+    if (extractYouTubeVideoId('https://youtu.be/dQw4w9WgXcQ') !== 'dQw4w9WgXcQ') {
+      throw new Error('Short youtu.be URL extraction failed');
+    }
+    if (extractYouTubeVideoId('https://www.youtube.com/live/dQw4w9WgXcQ') !== 'dQw4w9WgXcQ') {
+      throw new Error('Live URL extraction failed');
+    }
+
+    // Configure custom poll stream via admin API
+    const setRes = await api('/api/admin/youtube/poll-stream', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ pollVideoId: 'https://youtube.com/live/dQw4w9WgXcQ' })
+    });
+
+    if (!setRes.ok || !setRes.data.success || setRes.data.state.customPollVideoId !== 'dQw4w9WgXcQ') {
+      throw new Error(`Failed to configure custom poll stream: ${JSON.stringify(setRes.data)}`);
+    }
+
+    // Clear custom poll stream via admin API
+    const clearRes = await api('/api/admin/youtube/poll-stream', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ pollVideoId: '' })
+    });
+
+    if (!clearRes.ok || !clearRes.data.success || clearRes.data.state.customPollVideoId !== null) {
+      throw new Error(`Failed to clear custom poll stream: ${JSON.stringify(clearRes.data)}`);
+    }
+  });
+
   console.log('\n=======================================================');
   console.log(`  VERIFICATION RESULTS: ${passedCount} PASSED, ${failedCount} FAILED`);
   console.log('=======================================================\n');
